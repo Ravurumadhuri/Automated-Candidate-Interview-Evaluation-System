@@ -7,3 +7,6 @@ tiktoken
 pydantic
 fastapi
 uvicorn
+websockets
+jinja2
+aiofiles
