@@ -3,7 +3,7 @@ let ws;
 // --- Setup Function ---
 function startInterview() {
     const role = document.getElementById('jobRole').value;
-    if(!role) return alert("Please enter a job role");
+    if (!role) return alert("Please enter a job role");
 
     // UI Transition
     document.getElementById('setup-screen').style.display = 'none';
@@ -15,13 +15,13 @@ function startInterview() {
     const protocol = window.location.protocol === "https:" ? "wss" : "ws";
     ws = new WebSocket(`${protocol}://${window.location.host}/ws/interview?pos=${encodeURIComponent(role)}`);
 
-    ws.onopen = function() {
+    ws.onopen = function () {
         console.log("Connected to Interview Server");
     };
 
-    ws.onmessage = function(event) {
+    ws.onmessage = function (event) {
         const data = event.data;
-        
+
         // 1. Handle System Commands
         if (data.startsWith("SYSTEM_TURN:USER")) {
             enableInput(true);
@@ -37,19 +37,46 @@ function startInterview() {
             document.getElementById('status').style.color = 'red';
             document.getElementById('status').innerText = '● Finished';
             ws.close();
+
+            // Wait a moment for UI to settle, then take a screenshot of the chat
+            setTimeout(() => {
+                const chatScreen = document.getElementById('chat-screen');
+                if (window.html2canvas) {
+                    html2canvas(chatScreen).then(canvas => {
+                        const base64image = canvas.toDataURL("image/png");
+                        const role = document.getElementById('jobRole').value || "Unknown";
+
+                        fetch("/api/save-chat-screenshot", {
+                            method: "POST",
+                            headers: { "Content-Type": "application/json" },
+                            body: JSON.stringify({ image_base64: base64image, job_role: role })
+                        })
+                            .then(res => res.json())
+                            .then(resData => {
+                                if (resData.status === "success") {
+                                    addSystemMessage("Chat UI saved to output_images!");
+                                } else {
+                                    console.error("Server error saving image:", resData.message);
+                                }
+                            })
+                            .catch(e => console.error("Error saving chat image:", e));
+                    });
+                }
+            }, 1000);
+
             return;
         }
 
         // 2. Handle Chat Messages (Source:Content)
         const firstColon = data.indexOf(':');
-        if(firstColon > -1) {
+        if (firstColon > -1) {
             const source = data.substring(0, firstColon);
             const content = data.substring(firstColon + 1);
             addMessage(source, content);
         }
     };
-    
-    ws.onclose = function() {
+
+    ws.onclose = function () {
         document.getElementById('status').style.color = 'gray';
         document.getElementById('status').innerText = '● Disconnected';
     };
@@ -59,16 +86,16 @@ function startInterview() {
 
 function addMessage(source, content) {
     // If source is 'Candidate', ignore it because we already rendered the user's message manually
-    if(source === 'Candidate') return;
+    if (source === 'Candidate') return;
 
     const messagesDiv = document.getElementById('messages');
     const bubble = document.createElement('div');
-    
+
     let type = 'interviewer';
-    if(source === 'Evaluator') type = 'evaluator';
+    if (source === 'Evaluator') type = 'evaluator';
 
     bubble.className = `message ${type}`;
-    
+
     const nameSpan = document.createElement('div');
     nameSpan.className = 'sender-name';
     nameSpan.innerText = source;
@@ -96,7 +123,7 @@ function addSystemMessage(text) {
 function sendMsg() {
     const input = document.getElementById('msgInput');
     const text = input.value.trim();
-    if(!text) return;
+    if (!text) return;
 
     // Render User Bubble
     const messagesDiv = document.getElementById('messages');
@@ -108,7 +135,7 @@ function sendMsg() {
 
     // Send to backend
     ws.send(text);
-    
+
     // Clear and lock input
     input.value = '';
     enableInput(false);
@@ -117,10 +144,10 @@ function sendMsg() {
 function enableInput(enabled) {
     const input = document.getElementById('msgInput');
     input.disabled = !enabled;
-    if(enabled) input.focus();
+    if (enabled) input.focus();
 }
 
 // Handle 'Enter' key
-document.getElementById('msgInput').addEventListener("keypress", function(event) {
+document.getElementById('msgInput').addEventListener("keypress", function (event) {
     if (event.key === "Enter") sendMsg();
 });
